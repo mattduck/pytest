@@ -1,5 +1,7 @@
 """Utilities for assertion debugging"""
+import copy
 import pprint
+import os
 
 import _pytest._code
 import py

@@ -7,6 +7,7 @@ import sys
 
 from _pytest.assertion import util
 from _pytest.assertion import rewrite
+from _pytest.assertion import truncate
 
 
 def pytest_addoption(parser):
@@ -98,12 +99,6 @@ def pytest_collection(session):
             assertstate.hook.set_session(session)
 
 
-def _running_on_ci():
-    """Check if we're currently running on a CI system."""
-    env_vars = ['CI', 'BUILD_NUMBER']
-    return any(var in os.environ for var in env_vars)
-
-
 def pytest_runtest_setup(item):
     """Setup the pytest_assertrepr_compare hook
 
@@ -131,21 +126,7 @@ def pytest_runtest_setup(item):
             config=item.config, op=op, left=left, right=right)
         for new_expl in hook_result:
             if new_expl:
-
-                # Truncate lines if required
-                if (sum(len(p) for p in new_expl[1:]) > 80*8 and
-                        item.config.option.verbose < 2 and
-                        not _running_on_ci()):
-                    show_max = 10
-                    truncated_count = len(new_expl) - show_max
-                    new_expl[show_max - 1] += " ..."
-                    new_expl[show_max:] = [
-                        py.builtin._totext(""),
-                        py.builtin._totext('...Full output truncated (%d more lines)'
-                                           ', use "-vv" to show' % truncated_count
-                        ),
-                    ]
-
+                new_expl = truncate.truncate_if_required(new_expl, item)
                 new_expl = [line.replace("\n", "\\n") for line in new_expl]
                 res = py.builtin._totext("\n~").join(new_expl)
                 if item.config.getvalue("assertmode") == "rewrite":
