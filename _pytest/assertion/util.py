@@ -1,5 +1,7 @@
 """Utilities for assertion debugging"""
+import copy
 import pprint
+import os
 
 import _pytest._code
 import py
@@ -298,3 +300,65 @@ def _notin_text(term, text, verbose=False):
         else:
             newdiff.append(line)
     return newdiff
+
+
+def truncate_explanation(
+        explanation,
+        verbose=False,
+        trigger_length=80 * 8,
+        max_lines=10,
+        max_line_length=500,
+        ):
+    """ Truncate explanation lines and line length if required.
+
+    Truncate the explanation if required by the line length and
+    the pytest configuration. Add a user-friendly message.
+    """
+    new_expl = copy.deepcopy(explanation)
+
+    # Check if needs truncation
+    truncation_required = (
+        (sum(len(p) for p in new_expl[1:]) > trigger_length and
+         verbose < 2 and
+         not _running_on_ci())
+    )
+    if not truncation_required:
+        return new_expl
+
+    # Truncate extra lines
+    truncated_count = max(len(new_expl) - max_lines, 0)
+    new_expl = new_expl[:max_lines]
+
+    # Truncate individual long lines
+    shortened_count = 0
+    for i, s in enumerate(new_expl):
+        if len(s) > max_line_length:
+            new_expl[i] = s[:max_line_length] + " ..."
+            shortened_count += 1
+
+    # Format a useful message
+    msg = '...Full output truncated'
+    if shortened_count and truncated_count:
+        msg += ' (%d lines shortened and %d lines hidden)' % (
+            shortened_count, truncated_count)
+    elif shortened_count:
+        msg += ' (%d lines shortened)' % shortened_count
+    elif truncated_count:
+        msg += ' (%d lines hidden)' % truncated_count
+    msg += ', use "-vv" to show'
+
+    # Append message to the output
+    if len(new_expl[-1]) <= max_line_length:
+        new_expl[-1] += " ..."
+    new_expl.extend([
+        py.builtin._totext(""),
+        py.builtin._totext(msg),
+    ])
+
+    return new_expl
+
+
+def _running_on_ci():
+    """Check if we're currently running on a CI system."""
+    env_vars = ['CI', 'BUILD_NUMBER']
+    return any(var in os.environ for var in env_vars)
